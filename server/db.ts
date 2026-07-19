@@ -7,12 +7,15 @@ import {
   like,
   lte,
   or,
+  sql,
 } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import { createConnection } from "mysql2/promise";
 import {
   caseAppeals,
   casePayments,
   casePhotos,
+  casePhotoObjects,
   households,
   type AppealStatus,
   type CaseStatus,
@@ -23,17 +26,42 @@ import {
   violationTemplates,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { getRuntimeEnv } from "./runtimeEnv";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
+/** Cloudflare Hyperdrive connections are request-scoped. */
+export function resetDbForRequest() {
+  _db = null;
+}
+
 export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
-    try {
-      _db = drizzle(process.env.DATABASE_URL);
-    } catch (error) {
-      console.warn("[Database] Failed to connect:", error);
-      _db = null;
+  if (_db) return _db;
+
+  try {
+    const runtime = getRuntimeEnv();
+    if (runtime?.HYPERDRIVE) {
+      const connection = await createConnection({
+        host: runtime.HYPERDRIVE.host,
+        user: runtime.HYPERDRIVE.user,
+        password: runtime.HYPERDRIVE.password,
+        database: runtime.HYPERDRIVE.database,
+        port: runtime.HYPERDRIVE.port,
+        disableEval: true,
+      });
+      // drizzle's overloads expose a Connection-backed and Pool-backed client as
+      // different TypeScript types, although the query API used below is the same.
+      _db = drizzle(connection) as unknown as ReturnType<typeof drizzle>;
+      return _db;
     }
+
+    const databaseUrl = runtime?.DATABASE_URL ?? process.env.DATABASE_URL;
+    if (databaseUrl) {
+      _db = drizzle(databaseUrl);
+    }
+  } catch (error) {
+    console.warn("[Database] Failed to connect:", error);
+    _db = null;
   }
   return _db;
 }
@@ -42,6 +70,39 @@ async function requireDb() {
   const database = await getDb();
   if (!database) throw new Error("資料庫尚未連線，請確認 DATABASE_URL 設定。");
   return database;
+}
+
+export async function checkDatabaseHealth() {
+  const database = await requireDb();
+  await database.execute(sql`SELECT 1 AS ok`);
+  return true;
+}
+
+export async function storeCasePhotoObject(input: {
+  storageKey: string;
+  data: Uint8Array;
+  mimeType: string;
+}) {
+  const database = await requireDb();
+  await database.insert(casePhotoObjects).values({
+    ...input,
+    size: input.data.byteLength,
+  });
+}
+
+export async function getCasePhotoObject(storageKey: string) {
+  const database = await requireDb();
+  const rows = await database
+    .select()
+    .from(casePhotoObjects)
+    .where(eq(casePhotoObjects.storageKey, storageKey))
+    .limit(1);
+  return rows[0];
+}
+
+export async function deleteCasePhotoObject(storageKey: string) {
+  const database = await requireDb();
+  await database.delete(casePhotoObjects).where(eq(casePhotoObjects.storageKey, storageKey));
 }
 
 export async function upsertUser(user: InsertUser): Promise<void> {

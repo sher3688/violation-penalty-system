@@ -17,12 +17,12 @@ const databaseMocks = vi.hoisted(() => ({
   deleteViolationCase: vi.fn(),
 }));
 
-const uploadMocks = vi.hoisted(() => ({
-  removeLocalCasePhoto: vi.fn(),
+const photoStorageMocks = vi.hoisted(() => ({
+  removeCasePhoto: vi.fn(),
 }));
 
 vi.mock("./db", () => databaseMocks);
-vi.mock("./localUploads", () => uploadMocks);
+vi.mock("./casePhotoStorage", () => photoStorageMocks);
 
 import { appRouter } from "./routers";
 
@@ -94,7 +94,7 @@ describe("案件授權與狀態流程", () => {
     databaseMocks.updateViolationCase.mockResolvedValue(undefined);
     databaseMocks.deleteCasePhoto.mockResolvedValue(undefined);
     databaseMocks.deleteViolationCase.mockResolvedValue({ photos: [] });
-    uploadMocks.removeLocalCasePhoto.mockResolvedValue(undefined);
+    photoStorageMocks.removeCasePhoto.mockResolvedValue(undefined);
   });
 
   it("拒絕不完整或不合法的罰單案件輸入，且不寫入資料庫", async () => {
@@ -206,7 +206,7 @@ describe("案件授權與狀態流程", () => {
     const adminCaller = callerFor(makeUser("admin"));
     await expect(adminCaller.cases.deletePhoto({ caseId: 11, photoId: 41 })).resolves.toEqual({ success: true });
     expect(databaseMocks.deleteCasePhoto).toHaveBeenCalledWith(11, 41);
-    expect(uploadMocks.removeLocalCasePhoto).toHaveBeenCalledWith("existing.jpg");
+    expect(photoStorageMocks.removeCasePhoto).toHaveBeenCalledWith("existing.jpg");
   });
 
   it("僅管理員可刪除案件，並清理所有關聯照片檔案", async () => {
@@ -224,8 +224,8 @@ describe("案件授權與狀態流程", () => {
     await expect(adminCaller.cases.delete({ caseId: 11 })).resolves.toEqual({ success: true });
 
     expect(databaseMocks.deleteViolationCase).toHaveBeenCalledWith(11);
-    expect(uploadMocks.removeLocalCasePhoto).toHaveBeenNthCalledWith(1, "scene-a.jpg");
-    expect(uploadMocks.removeLocalCasePhoto).toHaveBeenNthCalledWith(2, "scene-b.jpg");
+    expect(photoStorageMocks.removeCasePhoto).toHaveBeenNthCalledWith(1, "scene-a.jpg");
+    expect(photoStorageMocks.removeCasePhoto).toHaveBeenNthCalledWith(2, "scene-b.jpg");
   });
 
   it("管理員可審核非本人戶號案件的待處理申訴", async () => {

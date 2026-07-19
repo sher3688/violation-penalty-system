@@ -1,5 +1,6 @@
 import {
   boolean,
+  customType,
   index,
   int,
   mysqlEnum,
@@ -9,6 +10,12 @@ import {
   uniqueIndex,
   varchar,
 } from "drizzle-orm/mysql-core";
+
+const mediumBlob = customType<{ data: Uint8Array; driverData: Buffer }>({
+  dataType: () => "mediumblob",
+  toDriver: value => Buffer.from(value),
+  fromDriver: value => new Uint8Array(value),
+});
 
 export const caseStatuses = [
   "pending_payment",
@@ -138,6 +145,15 @@ export const casePhotos = mysqlTable(
   },
   table => [index("case_photos_case_idx").on(table.caseId, table.sortOrder)]
 );
+
+/** 免費部署模式下，照片位元組直接存入 MySQL，避免要求 R2 付款方式。 */
+export const casePhotoObjects = mysqlTable("case_photo_objects", {
+  storageKey: varchar("storageKey", { length: 255 }).primaryKey(),
+  data: mediumBlob("data").notNull(),
+  mimeType: varchar("mimeType", { length: 80 }).notNull(),
+  size: int("size").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
 
 /** 每件案件的繳款紀錄。每案至多一筆正式繳款紀錄。 */
 export const casePayments = mysqlTable(

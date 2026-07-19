@@ -2,9 +2,10 @@ import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:cry
 import { promisify } from "node:util";
 import { jwtVerify, SignJWT } from "jose";
 import { parse as parseCookie } from "cookie";
-import type { Request, Response } from "express";
+import type { Request } from "express";
 import type { User } from "../drizzle/schema";
 import { getUserById } from "./db";
+import { getRuntimeEnv } from "./runtimeEnv";
 
 const scrypt = promisify(scryptCallback);
 
@@ -12,14 +13,25 @@ export const LOCAL_SESSION_COOKIE = "violation_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 12;
 const PASSWORD_KEY_LENGTH = 64;
 
+type SessionCookieResponse = {
+  cookie(name: string, value: string, options?: Record<string, unknown>): void;
+  clearCookie(name: string, options?: Record<string, unknown>): void;
+};
+
 function getSessionSecret(): Uint8Array {
-  const secret = process.env.LOCAL_AUTH_SECRET ?? process.env.JWT_SECRET;
+  const runtime = getRuntimeEnv();
+  const secret = runtime?.LOCAL_AUTH_SECRET ?? runtime?.JWT_SECRET ??
+    process.env.LOCAL_AUTH_SECRET ?? process.env.JWT_SECRET;
   if (!secret) {
     throw new Error(
       "缺少 LOCAL_AUTH_SECRET；請在部署環境設定至少 32 字元的隨機工作階段密鑰。"
     );
   }
   return new TextEncoder().encode(secret);
+}
+
+function useSecureCookie() {
+  return getRuntimeEnv()?.NODE_ENV === "production" || process.env.NODE_ENV === "production";
 }
 
 export function validatePassword(password: string): string | null {
@@ -63,24 +75,24 @@ export async function createLocalSessionToken(user: User): Promise<string> {
 }
 
 export async function setLocalSession(
-  response: Response,
+  response: SessionCookieResponse,
   user: User
 ): Promise<void> {
   const token = await createLocalSessionToken(user);
   response.cookie(LOCAL_SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: useSecureCookie(),
     maxAge: SESSION_TTL_SECONDS * 1000,
     path: "/",
   });
 }
 
-export function clearLocalSession(response: Response): void {
+export function clearLocalSession(response: SessionCookieResponse): void {
   response.clearCookie(LOCAL_SESSION_COOKIE, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: useSecureCookie(),
     path: "/",
   });
 }
