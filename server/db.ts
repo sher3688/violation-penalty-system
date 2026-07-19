@@ -29,6 +29,7 @@ import { ENV } from "./_core/env";
 import { getRuntimeEnv } from "./runtimeEnv";
 
 let _db: ReturnType<typeof drizzle> | null = null;
+let _schemaPromise: Promise<void> | null = null;
 
 /** Cloudflare Hyperdrive connections are request-scoped. */
 export function resetDbForRequest() {
@@ -76,6 +77,133 @@ export async function checkDatabaseHealth() {
   const database = await requireDb();
   await database.execute(sql`SELECT 1 AS ok`);
   return true;
+}
+
+const productionSchema = [
+  `CREATE TABLE IF NOT EXISTS users (
+    id int AUTO_INCREMENT PRIMARY KEY,
+    openId varchar(64) NOT NULL UNIQUE,
+    username varchar(64) UNIQUE,
+    passwordHash varchar(255),
+    name text,
+    email varchar(320),
+    householdNo varchar(64),
+    loginMethod varchar(64),
+    role enum('user','admin') NOT NULL DEFAULT 'user',
+    isActive boolean NOT NULL DEFAULT true,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    lastSignedIn timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX users_household_idx (householdNo),
+    INDEX users_role_active_idx (role, isActive)
+  ) ENGINE=InnoDB`,
+  `CREATE TABLE IF NOT EXISTS households (
+    id int AUTO_INCREMENT PRIMARY KEY,
+    householdNo varchar(64) NOT NULL UNIQUE,
+    residentName varchar(120),
+    contactEmail varchar(320),
+    isActive boolean NOT NULL DEFAULT true,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX households_active_idx (isActive, householdNo)
+  ) ENGINE=InnoDB`,
+  `CREATE TABLE IF NOT EXISTS violation_templates (
+    id int AUTO_INCREMENT PRIMARY KEY,
+    name varchar(120) NOT NULL UNIQUE,
+    defaultDescription text NOT NULL,
+    defaultPenaltyAmount int NOT NULL DEFAULT 0,
+    regulationBasis varchar(255) NOT NULL DEFAULT '住戶規約',
+    isActive boolean NOT NULL DEFAULT true,
+    createdByUserId int NOT NULL,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX templates_active_idx (isActive, name),
+    CONSTRAINT violation_templates_createdByUserId_users_id_fk FOREIGN KEY (createdByUserId) REFERENCES users(id) ON DELETE RESTRICT
+  ) ENGINE=InnoDB`,
+  `CREATE TABLE IF NOT EXISTS violation_cases (
+    id int AUTO_INCREMENT PRIMARY KEY,
+    noticeNo varchar(40) NOT NULL UNIQUE,
+    householdNo varchar(64) NOT NULL,
+    templateId int,
+    violationType varchar(120) NOT NULL,
+    occurredAt timestamp NOT NULL,
+    location varchar(255) NOT NULL,
+    description text NOT NULL,
+    penaltyAmount int NOT NULL DEFAULT 0,
+    status enum('pending_payment','paid','appealing','closed') NOT NULL DEFAULT 'pending_payment',
+    regulationBasis varchar(255) NOT NULL DEFAULT '住戶規約',
+    managementOfficeName varchar(160) NOT NULL DEFAULT '社區管理委員會',
+    issuedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    createdByUserId int NOT NULL,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX cases_household_idx (householdNo),
+    INDEX cases_template_idx (templateId),
+    INDEX cases_status_idx (status),
+    INDEX cases_occurred_at_idx (occurredAt),
+    CONSTRAINT violation_cases_createdByUserId_users_id_fk FOREIGN KEY (createdByUserId) REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT violation_cases_templateId_violation_templates_id_fk FOREIGN KEY (templateId) REFERENCES violation_templates(id) ON DELETE SET NULL
+  ) ENGINE=InnoDB`,
+  `CREATE TABLE IF NOT EXISTS case_photos (
+    id int AUTO_INCREMENT PRIMARY KEY,
+    caseId int NOT NULL,
+    storageKey varchar(255) NOT NULL UNIQUE,
+    originalName varchar(255) NOT NULL,
+    mimeType varchar(80) NOT NULL,
+    sortOrder int NOT NULL DEFAULT 0,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX case_photos_case_idx (caseId, sortOrder),
+    CONSTRAINT case_photos_caseId_violation_cases_id_fk FOREIGN KEY (caseId) REFERENCES violation_cases(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB`,
+  `CREATE TABLE IF NOT EXISTS case_photo_objects (
+    storageKey varchar(255) PRIMARY KEY,
+    data mediumblob NOT NULL,
+    mimeType varchar(80) NOT NULL,
+    size int NOT NULL,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB`,
+  `CREATE TABLE IF NOT EXISTS case_payments (
+    id int AUTO_INCREMENT PRIMARY KEY,
+    caseId int NOT NULL UNIQUE,
+    amount int NOT NULL,
+    paidAt timestamp NOT NULL,
+    note text,
+    receivedByUserId int NOT NULL,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT case_payments_caseId_violation_cases_id_fk FOREIGN KEY (caseId) REFERENCES violation_cases(id) ON DELETE CASCADE,
+    CONSTRAINT case_payments_receivedByUserId_users_id_fk FOREIGN KEY (receivedByUserId) REFERENCES users(id) ON DELETE RESTRICT
+  ) ENGINE=InnoDB`,
+  `CREATE TABLE IF NOT EXISTS case_appeals (
+    id int AUTO_INCREMENT PRIMARY KEY,
+    caseId int NOT NULL UNIQUE,
+    content text NOT NULL,
+    status enum('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+    submittedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    result text,
+    decidedAt timestamp NULL,
+    decidedByUserId int,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT case_appeals_caseId_violation_cases_id_fk FOREIGN KEY (caseId) REFERENCES violation_cases(id) ON DELETE CASCADE,
+    CONSTRAINT case_appeals_decidedByUserId_users_id_fk FOREIGN KEY (decidedByUserId) REFERENCES users(id) ON DELETE RESTRICT
+  ) ENGINE=InnoDB`,
+] as const;
+
+/** Creates the empty production schema once per Worker isolate without handling credentials in the browser. */
+export async function ensureDatabaseSchema() {
+  if (!_schemaPromise) {
+    _schemaPromise = (async () => {
+      const database = await requireDb();
+      for (const statement of productionSchema) {
+        await database.execute(sql.raw(statement));
+      }
+    })().catch(error => {
+      _schemaPromise = null;
+      throw error;
+    });
+  }
+  await _schemaPromise;
 }
 
 export async function storeCasePhotoObject(input: {
