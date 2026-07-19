@@ -77,6 +77,15 @@ export default {
     db.resetDbForRequest();
     const url = new URL(request.url);
 
+    if (url.pathname.startsWith("/api/")) {
+      try {
+        await db.ensureDatabaseSchema();
+      } catch (error) {
+        console.error("[Database] Schema initialization failed:", error);
+        return json({ message: "資料庫初始化失敗，請稍後再試。" }, 503);
+      }
+    }
+
     if (url.pathname === "/api/health" && request.method === "GET") {
       const checks = {
         database: false,
