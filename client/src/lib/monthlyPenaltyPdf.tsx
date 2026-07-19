@@ -4,7 +4,7 @@ import { formatCurrency, formatDate, getCaseStatusMeta } from "@/lib/caseUtils";
 import { formatExportMonthTitle, summarizeMonthlyPenalties } from "@shared/monthlyPenaltyExport";
 
 const FONT_FAMILY = "MonthlyPenaltyPdfCjk";
-const FONT_SOURCE = "/manus-storage/NotoSansCJKtc-Regular_a2853409.otf";
+const FONT_SOURCE = "/NotoSansCJKtc-Regular.otf";
 let registeredFontSource: string | null = null;
 
 export type MonthlyPenaltyPdfCase = {
