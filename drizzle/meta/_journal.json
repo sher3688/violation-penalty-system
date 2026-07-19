@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1784339389576,
+      "tag": "0000_dark_carlie_cooper",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1784339661325,
+      "tag": "0001_material_nextwave",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1784339745810,
+      "tag": "0002_blushing_bloodstorm",
+      "breakpoints": true
+    }
+  ]
+}
