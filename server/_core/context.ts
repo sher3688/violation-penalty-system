@@ -1,5 +1,7 @@
 import type { User } from "../../drizzle/schema";
+import { getFirstActiveLocalAdmin } from "../db";
 import { getLocalSessionUser } from "../localAuth";
+import { isPublicAccessEnabled } from "../runtimeEnv";
 
 export type CookieResponse = {
   headers: Headers;
@@ -44,6 +46,9 @@ export async function createFetchContext(request: Request, responseHeaders = new
   const res = createCookieResponse(responseHeaders);
   let user: User | null = null;
   try { user = await getLocalSessionUser(req as any); } catch { user = null; }
+  if (!user && isPublicAccessEnabled()) {
+    user = (await getFirstActiveLocalAdmin()) ?? null;
+  }
   return { req, res, user };
 }
 
@@ -51,5 +56,8 @@ export async function createFetchContext(request: Request, responseHeaders = new
 export async function createContext(opts: any): Promise<TrpcContext> {
   let user: User | null = null;
   try { user = await getLocalSessionUser(opts.req); } catch { user = null; }
+  if (!user && isPublicAccessEnabled()) {
+    user = (await getFirstActiveLocalAdmin()) ?? null;
+  }
   return { req: opts.req, res: opts.res, user };
 }

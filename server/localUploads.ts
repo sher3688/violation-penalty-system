@@ -5,6 +5,7 @@ import type { Express, NextFunction, Request, Response } from "express";
 import multer from "multer";
 import * as db from "./db";
 import { getLocalSessionUser } from "./localAuth";
+import { isPublicAccessEnabled } from "./runtimeEnv";
 
 export const MAX_CASE_PHOTO_SIZE = 8 * 1024 * 1024;
 export const MAX_CASE_PHOTOS = 6;
@@ -80,7 +81,9 @@ const upload = multer({
 });
 
 async function requireLocalAdmin(request: Request, response: Response) {
-  const user = await getLocalSessionUser(request);
+  const user =
+    (await getLocalSessionUser(request)) ??
+    (isPublicAccessEnabled() ? await db.getFirstActiveLocalAdmin() : null);
   if (!user) {
     response.status(401).json({ message: "請先登入。" });
     return null;
@@ -137,7 +140,9 @@ export function registerLocalUploadRoutes(app: Express) {
 
   app.get("/api/files/:storageKey", async (request: Request, response: Response, next: NextFunction) => {
     try {
-      const user = await getLocalSessionUser(request);
+      const user =
+        (await getLocalSessionUser(request)) ??
+        (isPublicAccessEnabled() ? await db.getFirstActiveLocalAdmin() : null);
       if (!user) {
         response.status(401).json({ message: "請先登入。" });
         return;

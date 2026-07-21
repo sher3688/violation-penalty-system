@@ -195,9 +195,9 @@ export async function ensureDatabaseSchema() {
   if (!_schemaPromise) {
     _schemaPromise = (async () => {
       const database = await requireDb();
-      for (const statement of productionSchema) {
-        await database.execute(sql.raw(statement));
-      }
+      // Production schema changes are applied by migrations, not on every API call.
+      // The runtime account only needs normal read/write permissions.
+      await database.select({ id: users.id }).from(users).limit(1);
     })().catch(error => {
       _schemaPromise = null;
       throw error;
@@ -284,6 +284,24 @@ export async function getUserById(id: number): Promise<User | undefined> {
   const database = await getDb();
   if (!database) return undefined;
   const result = await database.select().from(users).where(eq(users.id, id)).limit(1);
+  return result[0];
+}
+
+export async function getFirstActiveLocalAdmin(): Promise<User | undefined> {
+  const database = await getDb();
+  if (!database) return undefined;
+  const result = await database
+    .select()
+    .from(users)
+    .where(
+      and(
+        eq(users.loginMethod, "local-password"),
+        eq(users.role, "admin"),
+        eq(users.isActive, true)
+      )
+    )
+    .orderBy(users.id)
+    .limit(1);
   return result[0];
 }
 

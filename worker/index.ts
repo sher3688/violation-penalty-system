@@ -3,7 +3,7 @@ import { appRouter } from "../server/routers";
 import { createFetchContext } from "../server/_core/context";
 import { getLocalSessionUser } from "../server/localAuth";
 import * as db from "../server/db";
-import { setRuntimeEnv, type WorkerRuntimeEnv } from "../server/runtimeEnv";
+import { isPublicAccessEnabled, setRuntimeEnv, type WorkerRuntimeEnv } from "../server/runtimeEnv";
 import {
   MAX_CASE_PHOTO_SIZE,
   MAX_CASE_PHOTOS,
@@ -18,7 +18,9 @@ function json(data: unknown, status = 200, headers?: HeadersInit) {
 
 async function requireAdmin(request: Request) {
   const req = { headers: { cookie: request.headers.get("cookie") ?? "" } } as any;
-  const user = await getLocalSessionUser(req);
+  const user =
+    (await getLocalSessionUser(req)) ??
+    (isPublicAccessEnabled() ? await db.getFirstActiveLocalAdmin() : null);
   return user?.role === "admin" ? user : null;
 }
 
@@ -56,7 +58,9 @@ async function uploadPhotos(request: Request, env: WorkerRuntimeEnv) {
 async function servePhoto(request: Request, env: WorkerRuntimeEnv, key: string) {
   if (!isSafeCasePhotoStorageKey(key)) return json({ message: "照片識別碼格式不正確。" }, 400);
   const req = { headers: { cookie: request.headers.get("cookie") ?? "" } } as any;
-  const user = await getLocalSessionUser(req);
+  const user =
+    (await getLocalSessionUser(req)) ??
+    (isPublicAccessEnabled() ? await db.getFirstActiveLocalAdmin() : null);
   if (!user) return json({ message: "請先登入。" }, 401);
   const photo = await db.getCasePhotoAccess(key);
   if (!photo) return json({ message: "找不到照片。" }, 404);

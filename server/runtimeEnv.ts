@@ -24,6 +24,9 @@ export type WorkerRuntimeEnv = {
   DATABASE_URL?: string;
   JWT_SECRET?: string;
   LOCAL_AUTH_SECRET?: string;
+  ADMIN_RECOVERY_USERNAME?: string;
+  ADMIN_RECOVERY_PASSWORD?: string;
+  PUBLIC_ACCESS?: string;
   NODE_ENV?: string;
 };
 
@@ -35,4 +38,16 @@ export function setRuntimeEnv(env: WorkerRuntimeEnv) {
 
 export function getRuntimeEnv() {
   return runtimeEnv;
+}
+
+/**
+ * Temporary public management mode.
+ *
+ * This release intentionally defaults to enabled so the deployed site opens
+ * without a login screen. Setting PUBLIC_ACCESS=false restores the normal
+ * cookie-based login flow without removing any accounts or passwords.
+ */
+export function isPublicAccessEnabled() {
+  const value = runtimeEnv?.PUBLIC_ACCESS ?? process.env.PUBLIC_ACCESS;
+  return value?.trim().toLowerCase() !== "false";
 }
