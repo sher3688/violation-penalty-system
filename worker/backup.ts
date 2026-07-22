@@ -2,7 +2,6 @@ type D1Result = { success: boolean; meta?: unknown };
 type D1Statement = {
   bind(...values: unknown[]): D1Statement;
   run(): Promise<D1Result>;
-  first<T = Record<string, unknown>>(): Promise<T | null>;
 };
 type D1Database = {
   prepare(sql: string): D1Statement;
@@ -71,10 +70,7 @@ export default {
     if (url.pathname === "/api/sync" && request.method === "POST") return receive(request, env);
     if (url.pathname === "/api/health") {
       await ensureSchema(env.BACKUP_DB);
-      const rows = await env.BACKUP_DB.prepare(
-        "SELECT key, value FROM backup_meta WHERE key IN ('generated_at', 'record_count')"
-      ).first<{ key: string; value: string }>();
-      return json({ ready: true, role: "read-only-backup", initialized: Boolean(rows) });
+      return json({ ready: true, role: "read-only-backup" });
     }
     return json({ message: "Violation penalty backup receiver", role: "read-only" });
   },
