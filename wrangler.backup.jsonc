@@ -1,0 +1,13 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "violation-penalty-backup",
+  "main": "worker/backup.ts",
+  "compatibility_date": "2026-07-19",
+  "d1_databases": [
+    {
+      "binding": "BACKUP_DB",
+      "database_name": "violation-penalty-backup",
+      "database_id": "71c2ae95-9d36-44bf-bcbb-dd5caefc435c"
+    }
+  ]
+}

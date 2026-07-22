@@ -79,6 +79,33 @@ export async function checkDatabaseHealth() {
   return true;
 }
 
+/** Textual backup only. Photo bytes stay out of D1 unless R2 is enabled later. */
+export async function exportBackupSnapshot() {
+  const database = await requireDb();
+  const [userRows, householdRows, templateRows, caseRows, photoRows, paymentRows, appealRows] = await Promise.all([
+    database.select().from(users),
+    database.select().from(households),
+    database.select().from(violationTemplates),
+    database.select().from(violationCases),
+    database.select().from(casePhotos),
+    database.select().from(casePayments),
+    database.select().from(caseAppeals),
+  ]);
+  return {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    tables: {
+      users: userRows,
+      households: householdRows,
+      violation_templates: templateRows,
+      violation_cases: caseRows,
+      case_photos: photoRows,
+      case_payments: paymentRows,
+      case_appeals: appealRows,
+    },
+  };
+}
+
 const productionSchema = [
   `CREATE TABLE IF NOT EXISTS users (
     id int AUTO_INCREMENT PRIMARY KEY,

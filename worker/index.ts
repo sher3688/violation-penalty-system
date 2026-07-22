@@ -16,6 +16,23 @@ function json(data: unknown, status = 200, headers?: HeadersInit) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", ...headers } });
 }
 
+function hasBackupSecret(request: Request, env: WorkerRuntimeEnv) {
+  const expected = env.BACKUP_SYNC_SECRET?.trim();
+  return Boolean(expected && request.headers.get("authorization") === `Bearer ${expected}`);
+}
+
+async function pushBackup(env: WorkerRuntimeEnv) {
+  if (!env.BACKUP_SYNC_URL || !env.BACKUP_SYNC_SECRET) throw new Error("Backup sync is not configured.");
+  const snapshot = await db.exportBackupSnapshot();
+  const response = await fetch(env.BACKUP_SYNC_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${env.BACKUP_SYNC_SECRET}` },
+    body: JSON.stringify(snapshot),
+  });
+  if (!response.ok) throw new Error(`Backup receiver returned ${response.status}.`);
+  return snapshot;
+}
+
 async function requireAdmin(request: Request) {
   const req = { headers: { cookie: request.headers.get("cookie") ?? "" } } as any;
   const user =
@@ -107,6 +124,12 @@ export default {
       return json({ ready, checks }, ready ? 200 : 503, { "cache-control": "no-store" });
     }
 
+    if (url.pathname === "/api/backup/push" && request.method === "POST") {
+      if (!hasBackupSecret(request, env)) return json({ message: "Unauthorized" }, 401);
+      const snapshot = await pushBackup(env);
+      return json({ success: true, generatedAt: snapshot.generatedAt });
+    }
+
     if (url.pathname.startsWith("/api/trpc")) {
       const responseHeaders = new Headers();
       const response = await fetchRequestHandler({
@@ -127,5 +150,10 @@ export default {
     if (fileMatch && request.method === "GET") return servePhoto(request, env, decodeURIComponent(fileMatch[1]));
 
     return env.ASSETS.fetch(request);
+  },
+  async scheduled(_controller: unknown, env: WorkerRuntimeEnv) {
+    setRuntimeEnv(env);
+    db.resetDbForRequest();
+    await pushBackup(env);
   },
 };

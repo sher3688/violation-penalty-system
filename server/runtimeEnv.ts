@@ -27,6 +27,8 @@ export type WorkerRuntimeEnv = {
   ADMIN_RECOVERY_USERNAME?: string;
   ADMIN_RECOVERY_PASSWORD?: string;
   PUBLIC_ACCESS?: string;
+  BACKUP_SYNC_URL?: string;
+  BACKUP_SYNC_SECRET?: string;
   NODE_ENV?: string;
 };
 
