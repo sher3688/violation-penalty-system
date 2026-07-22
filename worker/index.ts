@@ -29,7 +29,10 @@ async function pushBackup(env: WorkerRuntimeEnv) {
     headers: { "content-type": "application/json", authorization: `Bearer ${env.BACKUP_SYNC_SECRET}` },
     body: JSON.stringify(snapshot),
   });
-  if (!response.ok) throw new Error(`Backup receiver returned ${response.status}.`);
+  if (!response.ok) {
+    const details = await response.text();
+    throw new Error(`Backup receiver returned ${response.status}: ${details.slice(0, 500)}`);
+  }
   return snapshot;
 }
 
@@ -126,8 +129,12 @@ export default {
 
     if (url.pathname === "/api/backup/push" && request.method === "POST") {
       if (!hasBackupSecret(request, env)) return json({ message: "Unauthorized" }, 401);
-      const snapshot = await pushBackup(env);
-      return json({ success: true, generatedAt: snapshot.generatedAt });
+      try {
+        const snapshot = await pushBackup(env);
+        return json({ success: true, generatedAt: snapshot.generatedAt });
+      } catch (error) {
+        return json({ success: false, message: error instanceof Error ? error.message : String(error) }, 502);
+      }
     }
 
     if (url.pathname.startsWith("/api/trpc")) {
