@@ -5,6 +5,9 @@
   "compatibility_date": "2026-07-19",
   "compatibility_flags": ["nodejs_compat", "nodejs_compat_populate_process_env"],
   "keep_vars": true,
+  "triggers": {
+    "crons": ["*/30 * * * *"]
+  },
   "assets": {
     "directory": "./dist/public",
     "binding": "ASSETS",
