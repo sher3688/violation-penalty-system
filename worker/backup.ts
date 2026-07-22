@@ -12,20 +12,13 @@ type D1Database = {
 type BackupEnv = { BACKUP_DB: D1Database; BACKUP_SYNC_SECRET: string };
 type Snapshot = { version: number; generatedAt: string; tables: Record<string, unknown[]> };
 
-const schema = `
-CREATE TABLE IF NOT EXISTS backup_records (
-  generation TEXT NOT NULL,
-  table_name TEXT NOT NULL,
-  record_key TEXT NOT NULL,
-  payload TEXT NOT NULL,
-  PRIMARY KEY (generation, table_name, record_key)
-);
-CREATE TABLE IF NOT EXISTS backup_meta (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS backup_records_generation_idx ON backup_records(generation);
-`;
+async function ensureSchema(database: D1Database) {
+  await database.batch([
+    database.prepare("CREATE TABLE IF NOT EXISTS backup_records (generation TEXT NOT NULL, table_name TEXT NOT NULL, record_key TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY (generation, table_name, record_key))"),
+    database.prepare("CREATE TABLE IF NOT EXISTS backup_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"),
+    database.prepare("CREATE INDEX IF NOT EXISTS backup_records_generation_idx ON backup_records(generation)"),
+  ]);
+}
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8" } });
@@ -46,7 +39,7 @@ async function receive(request: Request, env: BackupEnv) {
   const snapshot = await request.json<Snapshot>();
   if (snapshot?.version !== 1 || !snapshot.tables || !snapshot.generatedAt) return json({ message: "Invalid snapshot" }, 400);
 
-  await env.BACKUP_DB.exec(schema);
+  await ensureSchema(env.BACKUP_DB);
   const generation = crypto.randomUUID();
   let count = 0;
   for (const [tableName, records] of Object.entries(snapshot.tables)) {
@@ -76,7 +69,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/api/sync" && request.method === "POST") return receive(request, env);
     if (url.pathname === "/api/health") {
-      await env.BACKUP_DB.exec(schema);
+      await ensureSchema(env.BACKUP_DB);
       return json({ ready: true, role: "read-only-backup" });
     }
     return json({ message: "Violation penalty backup receiver", role: "read-only" });
