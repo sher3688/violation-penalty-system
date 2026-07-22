@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "violation-penalty-migration",
+  "main": "worker/backup.ts",
+  "compatibility_date": "2026-07-19",
+  "d1_databases": [
+    {
+      "binding": "BACKUP_DB",
+      "database_name": "violation-penalty-primary",
+      "database_id": "a1bda6f6-3490-4bbf-813a-ff9f28b025b2"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "CASE_PHOTOS",
+      "bucket_name": "violation-penalty-photos"
+    }
+  ]
+}
