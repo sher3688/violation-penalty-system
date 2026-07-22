@@ -24,11 +24,15 @@ function hasBackupSecret(request: Request, env: WorkerRuntimeEnv) {
 async function pushBackup(env: WorkerRuntimeEnv) {
   if (!env.BACKUP_SYNC_URL || !env.BACKUP_SYNC_SECRET) throw new Error("Backup sync is not configured.");
   const snapshot = await db.exportBackupSnapshot();
-  const response = await fetch(env.BACKUP_SYNC_URL, {
+  const init: RequestInit = {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${env.BACKUP_SYNC_SECRET}` },
     body: JSON.stringify(snapshot),
-  });
+  };
+  const isMigrationTarget = env.BACKUP_SYNC_URL.includes("violation-penalty-migration.");
+  const response = isMigrationTarget && env.MIGRATION_WORKER
+    ? await env.MIGRATION_WORKER.fetch("https://migration.internal/api/sync", init)
+    : await fetch(env.BACKUP_SYNC_URL, init);
   if (!response.ok) {
     const details = await response.text();
     throw new Error(`Backup receiver returned ${response.status}: ${details.slice(0, 500)}`);

@@ -29,6 +29,7 @@ export type WorkerRuntimeEnv = {
   PUBLIC_ACCESS?: string;
   BACKUP_SYNC_URL?: string;
   BACKUP_SYNC_SECRET?: string;
+  MIGRATION_WORKER?: { fetch(request: Request | string, init?: RequestInit): Promise<Response> };
   NODE_ENV?: string;
 };
 

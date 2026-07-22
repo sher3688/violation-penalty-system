@@ -20,5 +20,11 @@
       "binding": "HYPERDRIVE",
       "id": "c76e8eccdbb749b59289c5fc9d5e98f1"
     }
+  ],
+  "services": [
+    {
+      "binding": "MIGRATION_WORKER",
+      "service": "violation-penalty-migration"
+    }
   ]
 }
